@@ -12,7 +12,7 @@ st.set_page_config(page_title="Review Pasien — Streamlit", page_icon="🦷", l
 
 # ===== DPJP Canon =====
 DPJP_CANON = [
-    "drg. Andi Tajrin, M.Kes., Sp.B.M.M., Subsp. C.O.M.(K)",
+    "Dr. drg. Andi Tajrin, M.Kes., Sp.B.M.M., Subsp. C.O.M.(K)",
     "drg. Mukhtar Nur Anam Sp.B.M.M.",
     "drg. Husnul Basyar, Sp. B.M.M.",
     "drg. Abul Fauzi, Sp.B.M.M., Subsp.T.M.T.M.J.(K)",
