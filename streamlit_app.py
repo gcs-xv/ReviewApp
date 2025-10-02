@@ -28,15 +28,20 @@ DPJP_CANON = [
 
 # ===== Fuzzy DPJP =====
 def _norm_doctor(s: str) -> str:
-    if not s: return ""
+    if not s:
+        return ""
+    # perbaiki typo umum & variasi gelar
     s = s.replace("drg..", "drg.")
     s = s.replace("Sp. BM", "Sp.BM").replace("Sp. BMM", "Sp.BMM")
     s = s.replace("Sp.BM(K)", "Sp.BMM").replace("Sp.BMM(K)", "Sp.BMM")
     s = s.replace("Sp.BM", "Sp.BMM")
+    # normalisasi huruf & token
     s = s.upper()
-    s = "".join(ch for ch in s if ch in string.ascii_uppercase + " ")
+    # KUNCI PERBAIKAN: non-huruf jadi SPASI (bukan dihapus)
+    import re
+    s = re.sub(r"[^A-Z]+", " ", s)
     return " ".join(s.split())
-
+    
 def _token_jaccard(a: str, b: str) -> float:
     ta = set(_norm_doctor(a).split())
     tb = set(_norm_doctor(b).split())
