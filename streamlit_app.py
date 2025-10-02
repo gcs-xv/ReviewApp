@@ -244,12 +244,26 @@ def parse_pdf_to_rows_and_period_bytes(pdf_bytes: bytes):
         name_clean = re.sub(r"[ \t\r\f\v]+", " ", raw_name).replace("\n", " ")
         name_clean = re.sub(r"\s{2,}", " ", name_clean).strip().title()
 
-        doc_m = re.search(r"(drg[^\n]+)", block, flags=re.IGNORECASE)
-        dokter_raw = doc_m.group(1).strip() if doc_m else ""
-        dokter_raw = re.split(r"\s\d{2}:\d{2}:\d{2}|ANJUNGAN|KLINIK|BELUM|,00|\.00|,0",
-                              dokter_raw, 1, flags=re.IGNORECASE)[0].strip()
-        dokter_raw = dokter_raw.rstrip(",;")
-        dpjp_auto = map_doctor_to_canonical(dokter_raw)
+# tangkap "drg." termasuk typo "drg..", lalu ambil sisa baris
+doc_m = re.search(r"(drg\.?\.?\s*[^\n]+)", block, flags=re.IGNORECASE)
+dokter_raw = doc_m.group(1).strip() if doc_m else ""
+
+# putus di penanda non-nama (loket/ruang/operator/angka tarif dll)
+dokter_raw = re.split(
+    r"\s\d{2}:\d{2}:\d{2}"           # jam
+    r"|ANJUNGAN(?:\s+MANDIRI)?"      # anjungan mandiri
+    r"|KLINIK"                       # kata 'Klinik ...'
+    r"|BELUM"                        # 'Belum Grouping/Koding'
+    r"|,00|\.00|,0"                  # sisa tarif
+    r"|MELIZAH"
+    r"|NAMIRA(?:\s+ANJANI)?"
+    r"|NUR\s+AMRAENI(?:\s+LATIF)?"
+    r"|DEWI(?:\s+SARTIKA)?",
+    dokter_raw, 1, flags=re.IGNORECASE
+)[0].strip()
+
+dokter_raw = dokter_raw.rstrip(",;")
+dpjp_auto = map_doctor_to_canonical(dokter_raw)
 
         rows.append({
             "No. RM": m.group("rm"),
