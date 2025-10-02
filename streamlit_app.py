@@ -237,37 +237,39 @@ def parse_pdf_to_rows_and_period_bytes(pdf_bytes: bytes):
 
     for i, m in enumerate(matches):
         start = m.start()
-        end   = matches[i+1].start() if i+1 < len(matches) else len(full_text)
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(full_text)
         block = full_text[start:end]
 
         raw_name = m.group("name")
         name_clean = re.sub(r"[ \t\r\f\v]+", " ", raw_name).replace("\n", " ")
         name_clean = re.sub(r"\s{2,}", " ", name_clean).strip().title()
 
-# tangkap "drg." termasuk typo "drg..", lalu ambil sisa baris
-doc_m = re.search(r"(drg\.?\.?\s*[^\n]+)", block, flags=re.IGNORECASE)
-dokter_raw = doc_m.group(1).strip() if doc_m else ""
+        # Tangkap baris yang diawali 'drg' (toleransi 'drg..')
+        doc_m = re.search(r"(drg\.?\.?\s*[^\n]+)", block, flags=re.IGNORECASE)
+        dokter_raw = doc_m.group(1).strip() if doc_m else ""
 
-# putus di penanda non-nama (loket/ruang/operator/angka tarif dll)
-dokter_raw = re.split(
-    r"\s\d{2}:\d{2}:\d{2}"           # jam
-    r"|ANJUNGAN(?:\s+MANDIRI)?"      # anjungan mandiri
-    r"|KLINIK"                       # kata 'Klinik ...'
-    r"|BELUM"                        # 'Belum Grouping/Koding'
-    r"|,00|\.00|,0"                  # sisa tarif
-    r"|MELIZAH"
-    r"|NAMIRA(?:\s+ANJANI)?"
-    r"|NUR\s+AMRAENI(?:\s+LATIF)?"
-    r"|DEWI(?:\s+SARTIKA)?",
-    dokter_raw, 1, flags=re.IGNORECASE
-)[0].strip()
+        # Putus di penanda non-nama agar tidak nyeret operator/loket/tarif dsb
+        dokter_raw = re.split(
+            r"\s\d{2}:\d{2}:\d{2}"          # jam
+            r"|ANJUNGAN(?:\s+MANDIRI)?"     # anjungan mandiri
+            r"|KLINIK"                      # 'Klinik'
+            r"|BELUM"                       # 'Belum Grouping/Koding'
+            r"|,00|\.00|,0"                 # nilai tarif
+            r"|MELIZAH"
+            r"|NAMIRA(?:\s+ANJANI)?"
+            r"|NUR\s+AMRAENI(?:\s+LATIF)?"
+            r"|DEWI(?:\s+SARTIKA)?",
+            dokter_raw,
+            1,
+            flags=re.IGNORECASE
+        )[0].strip()
 
-dokter_raw = dokter_raw.rstrip(",;")
-dpjp_auto = map_doctor_to_canonical(dokter_raw)
+        dokter_raw = dokter_raw.rstrip(",;")
+        dpjp_auto = map_doctor_to_canonical(dokter_raw)
 
         rows.append({
             "No. RM": m.group("rm"),
-            "Nama":   name_clean,
+            "Nama": name_clean,
             "Tgl Lahir": m.group("dob").replace("-", "/"),
             "DPJP (auto)": dpjp_auto,
             "checked": False,
@@ -277,6 +279,7 @@ dpjp_auto = map_doctor_to_canonical(dokter_raw)
             "operator": "",
         })
 
+    # Dedup
     uniq = {}
     for r in rows:
         key = (r["No. RM"], r["Nama"], r["Tgl Lahir"])
@@ -286,7 +289,9 @@ dpjp_auto = map_doctor_to_canonical(dokter_raw)
 
     out = []
     for i, r in enumerate(final, start=1):
-        rr = dict(r); rr["No."] = i; out.append(rr)
+        rr = dict(r)
+        rr["No."] = i
+        out.append(rr)
 
     return out, period_date
 
