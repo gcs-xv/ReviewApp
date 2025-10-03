@@ -30,32 +30,41 @@ DPJP_CANON = [
 def _norm_doctor(s: str) -> str:
     if not s:
         return ""
-    # perbaiki typo umum & variasi gelar
+    # betulkan typo/varian umum
     s = s.replace("drg..", "drg.")
-    s = s.replace("Sp. BM", "Sp.BM").replace("Sp. BMM", "Sp.BMM")
-    s = s.replace("Sp.BM(K)", "Sp.BMM").replace("Sp.BMM(K)", "Sp.BMM")
-    s = s.replace("Sp.BM", "Sp.BMM")
-    # normalisasi huruf & token
+    s = re.sub(r"Sp\.\s*BM\b", "Sp.BM", s, flags=re.IGNORECASE)  # "Sp. BM" -> "Sp.BM"
+
+    # UNIFIKASI: apa pun bentuk BM/BM(K) -> BMM
+    s = re.sub(r"Sp\.BM(\(K\))?",  "Sp.BMM", s, flags=re.IGNORECASE)
+    s = re.sub(r"Sp\.BMM(\(K\))?", "Sp.BMM", s, flags=re.IGNORECASE)
+
+    # uppercase + non-huruf jadi spasi (hindari 'MKESSPBMMM')
     s = s.upper()
-    # KUNCI PERBAIKAN: non-huruf jadi SPASI (bukan dihapus)
-    import re
     s = re.sub(r"[^A-Z]+", " ", s)
+
+    # SELARASKAN TOKEN: 'BMM' -> 'B M M' (biar match dengan 'B.M.M.')
+    s = re.sub(r"\bBMM\b", "B M M", s)
+    # kalau masih ada 'BM' tersisa di sumber lain, pecah juga
+    s = re.sub(r"\bBM\b", "B M", s)
+
     return " ".join(s.split())
-    
+
 def _token_jaccard(a: str, b: str) -> float:
     ta = set(_norm_doctor(a).split())
     tb = set(_norm_doctor(b).split())
-    if not ta or not tb: return 0.0
+    if not ta or not tb:
+        return 0.0
     return len(ta & tb) / len(ta | tb)
 
-def map_doctor_to_canonical(raw: str, candidates=DPJP_CANON, threshold: float = 0.35) -> str:
+# Turunkan sedikit ambang (opsional, tapi membantu kasus nama pendek)
+def map_doctor_to_canonical(raw: str, candidates=DPJP_CANON, threshold: float = 0.30) -> str:
     best, best_score = "", 0.0
     for c in candidates:
         sc = _token_jaccard(raw, c)
         if sc > best_score:
             best, best_score = c, sc
     return best if best_score >= threshold else ""
-
+    
 # ===== Helpers =====
 ID_MONTHS = {
     "JANUARI": 1, "FEBRUARI": 2, "MARET": 3, "APRIL": 4, "MEI": 5, "JUNI": 6,
