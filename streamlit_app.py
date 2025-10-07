@@ -27,25 +27,25 @@ DPJP_CANON = [
 ]
 
 # ===== Fuzzy DPJP =====
-# Token umum (gelar/derajat) yang TIDAK ikut menentukan identitas orang
+# Token gelar/derajat yang tidak menentukan identitas orang
 STOP_TOKENS = {
-    "DR", "DRG", "SP", "BM", "BMM", "M", "K",
-    "MARS", "MKES", "MKG", "PHD", "PH", "D",
-    "SUBSP", "C", "O", "TMTMJ", "TMJ", "ORTOGNAT", "D"
+    "DR", "DRG", "SP", "B", "M", "K",
+    "BMM", "MARS", "MKES", "MKG", "PHD",
+    "SUBSP", "C", "O", "TMTMJ", "TMJ", "ORTOGNAT"
 }
 
 def _norm_doctor(s: str) -> str:
     if not s:
         return ""
-    # satukan variasi
+    # satukan variasi umum
     s = s.replace("drg..", "drg.")
-    s = re.sub(r"Sp\.\s*BM\b", "Sp.BM", s, flags=re.IGNORECASE)
-    s = re.sub(r"Sp\.BM\(?K\)?",  "Sp.BMM", s, flags=re.IGNORECASE)  # BM(K)->BMM
-    s = re.sub(r"Sp\.BMM\(?K\)?", "Sp.BMM", s, flags=re.IGNORECASE)  # BMM(K)->BMM
+    s = re.sub(r"Sp\.\s*BM\b", "Sp.BM", s, flags=re.IGNORECASE)  # "Sp. BM" -> "Sp.BM"
+    s = re.sub(r"Sp\.BM\(?K\)?",  "Sp.BMM", s, flags=re.IGNORECASE)  # BM(K) -> BMM
+    s = re.sub(r"Sp\.BMM\(?K\)?", "Sp.BMM", s, flags=re.IGNORECASE)  # BMM(K) -> BMM
     s = s.upper()
-    # non-huruf jadi spasi
+    # non-huruf -> spasi agar token tidak nempel
     s = re.sub(r"[^A-Z]+", " ", s)
-    # pecah BMM/BM supaya konsisten dengan penulisan bertitik (B.M.M.)
+    # seragamkan BMM/BM jadi token terpisah (selaras dengan penulisan bertitik)
     s = re.sub(r"\bBMM\b", "B M M", s)
     s = re.sub(r"\bBM\b",  "B M", s)
     return " ".join(s.split())
@@ -53,39 +53,34 @@ def _norm_doctor(s: str) -> str:
 def _tokens(s: str) -> set[str]:
     return set(_norm_doctor(s).split())
 
-def _score_doctor(raw: str, canon: str) -> tuple[float, int]:
+def _score_doctor(raw: str, canon: str):
     ta, tb = _tokens(raw), _tokens(canon)
     if not ta or not tb:
         return 0.0, 0
-    # fokus pada token NAMA (buang gelar)
+    # fokus nama (buang gelar)
     na, nb = ta - STOP_TOKENS, tb - STOP_TOKENS
     inter_n = na & nb
-    # skor nama (sangat dibobot)
-    sn = (len(inter_n) / len(na | nb)) if (na and nb) else 0.0
-    # skor umum (sedikit bobot)
-    sa = len(ta & tb) / len(ta | tb)
-    # bobotkan: nama 85%, sisanya 15%
-    return 0.85 * sn + 0.15 * sa, len(inter_n)
+    sn = (len(inter_n) / len(na | nb)) if (na and nb) else 0.0  # skor nama
+    sa = len(ta & tb) / len(ta | tb)                            # skor umum
+    return 0.85 * sn + 0.15 * sa, len(inter_n)                  # bobot: nama 85%
 
 def map_doctor_to_canonical(raw: str, candidates=DPJP_CANON, threshold: float = 0.35) -> str:
     best, best_score = "", 0.0
     for c in candidates:
         sc, inter_name_cnt = _score_doctor(raw, c)
-        # WAJIB minimal 1 token nama sama (mis. 'GAZALI', 'IRFAN', 'TAJRIN', dst.)
+        # wajib ada minimal 1 token nama yg sama (tajrin, gazali, irfan, dll.)
         if inter_name_cnt == 0:
             continue
         if sc > best_score:
             best, best_score = c, sc
     return best if best_score >= threshold else ""
-# Turunkan sedikit ambang (opsional, tapi membantu kasus nama pendek)
-def map_doctor_to_canonical(raw: str, candidates=DPJP_CANON, threshold: float = 0.30) -> str:
-    best, best_score = "", 0.0
-    for c in candidates:
-        sc = _token_jaccard(raw, c)
-        if sc > best_score:
-            best, best_score = c, sc
-    return best if best_score >= threshold else ""
-    
+
+# --- NEW: paksa 'drg.' selalu huruf kecil tanpa mengubah 'Dr.' ---
+def _fix_drg_lower(s: str) -> str:
+    if not s:
+        return s
+    return re.sub(r'(?i)\bDRG\.', 'drg.', s)
+
 # ===== Helpers =====
 ID_MONTHS = {
     "JANUARI": 1, "FEBRUARI": 2, "MARET": 3, "APRIL": 4, "MEI": 5, "JUNI": 6,
@@ -220,7 +215,8 @@ def build_block(no, row, visit_key, base_date):
 
     kontrol = compute_kontrol_text(kontrol, diagnosa, base_date)
 
-    dpjp_full = (row.get("DPJP (auto)") or "").strip()
+    # APPLY lowercasing 'drg.' untuk hasil edit manual di tabel
+    dpjp_full = _fix_drg_lower((row.get("DPJP (auto)") or "").strip())
     telp = (row.get("telp") or "").strip()
     operator = (row.get("operator") or "").strip()
 
@@ -288,14 +284,17 @@ def parse_pdf_to_rows_and_period_bytes(pdf_bytes: bytes):
             r"|MELIZAH"
             r"|NAMIRA(?:\s+ANJANI)?"
             r"|NUR\s+AMRAENI(?:\s+LATIF)?"
-            r"|DEWI(?:\s+SARTIKA)?",
+            r"|DEWI(?:\s+SARTIKA)?"
+            r"|NURHIDAYA",                  # tambahan pemotong
             dokter_raw,
             1,
             flags=re.IGNORECASE
         )[0].strip()
 
         dokter_raw = dokter_raw.rstrip(",;")
-        dpjp_auto = map_doctor_to_canonical(dokter_raw)
+
+        # APPLY lowercasing 'drg.' untuk hasil mapping otomatis
+        dpjp_auto = _fix_drg_lower(map_doctor_to_canonical(dokter_raw))
 
         rows.append({
             "No. RM": m.group("rm"),
